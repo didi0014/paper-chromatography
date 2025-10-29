@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Didier's Paper Chromatography Simulation</title>
+<style>
+  :root { --panel-width: 420px; --canvas-w: 260px; --canvas-h: 520px; }
+  body { font-family: Arial, sans-serif; margin: 20px; display:flex; gap:24px; }
+  #left { width: calc(var(--canvas-w) + 40px); }
+  #right { width: var(--panel-width); }
+  h1 { font-size:18px; margin:0 0 8px 0; }
+  canvas { width: var(--canvas-w); height: var(--canvas-h); border:1px solid #333; background:#f3f7fb; display:block; }
+  #controls { margin-top:12px; }
+  select { min-width:220px; }
+  button { margin:6px 6px 6px 0; padding:6px 12px; }
+  #distanceDisplay { margin-top:10px; font-weight:600; }
+  #practice { border:1px solid #ddd; padding:12px; border-radius:6px; background:#fff; }
+  #practice h2 { margin:0 0 8px 0; font-size:16px; }
+  ol { padding-left:18px; margin-top:8px; }
+  .answerBox { width:80px; padding:4px; }
+  .mc { margin-top:6px; display:block; }
+  .feedback { margin-top:6px; font-weight:700; }
+  .correct { color:green; }
+  .incorrect { color:crimson; }
+  .smallNote { font-size:12px; color:#555; margin-top:6px; }
+  label.inline { display:inline-block; margin-right:8px; }
+</style>
+</head>
+<body>
+
+<div id="left">
+  <h1>Didier's Paper Chromatography Simulation</h1>
+  <canvas id="canvas" width="260" height="520"></canvas>
+
+  <div id="controls">
+    <div>
+      <label class="inline">Select pigments (multiple):</label><br>
+      <select id="pigmentSelect" multiple size="4">
+        <option value="red" selected>Red</option>
+        <option value="blue" selected>Blue</option>
+        <option value="yellow" selected>Yellow</option>
+        <option value="mystery" selected>Mystery Dye</option>
+      </select>
+    </div>
+
+    <div style="margin-top:8px;">
+      <button id="runBtn">Run Simulation</button>
+    </div>
+
+    <div id="distanceDisplay">
+      Solvent distance: <strong>0.0 cm</strong><br>
+    </div>
+  </div>
+</div>
+
+<div id="right">
+  <div id="practice">
+    <h2>Practice Problems</h2>
+
+    <ol id="questions">
+      <li>
+        Using the solvent and dye distances, calculate the Rf value for the red dye.<br>
+        <input id="q1" class="answerBox" placeholder="0.00"> 
+        <div id="fb1" class="feedback"></div>
+      </li>
+      <li>
+        Using the solvent and dye distances, calculate the Rf value for the blue dye.<br>
+        <input id="q2" class="answerBox" placeholder="0.00"> 
+        <div id="fb2" class="feedback"></div>
+      </li>
+      <li>
+        Using the solvent and dye distances, calculate the Rf value for the yellow dye.<br>
+        <input id="q3" class="answerBox" placeholder="0.00"> 
+        <div id="fb3" class="feedback"></div>
+      </li>
+      <li>
+        Using the Rf values, which dyes are present in the mystery dye?<br>
+        <label class="mc"><input type="radio" name="q4" value="Red Dye and Yellow Dye"> Red Dye and Yellow Dye</label>
+        <label class="mc"><input type="radio" name="q4" value="Red Dye and Blue Dye"> Red Dye and Blue Dye</label>
+        <label class="mc"><input type="radio" name="q4" value="Blue Dye and Yellow Dye"> Blue Dye and Yellow Dye</label>
+        <div id="fb4" class="feedback"></div>
+      </li>
+      <li>
+        If polar dyes can make stronger intermolecular attractions with the polar solvent used in this simulation, which dye is the most polar?<br>
+        <label class="mc"><input type="radio" name="q5" value="Red Dye"> Red Dye</label>
+        <label class="mc"><input type="radio" name="q5" value="Blue Dye"> Blue Dye</label>
+        <label class="mc"><input type="radio" name="q5" value="Yellow Dye"> Yellow Dye</label>
+        <div id="fb5" class="feedback"></div>
+      </li>
+      <li>
+        If a few more minutes go by and the solvent front travels a total of 11.2 cm, how far will the blue dye have traveled? (decimal, round to 2 significant digits)<br>
+        <input id="q6" class="answerBox" placeholder="0.0"> cm
+        <div id="fb6" class="feedback"></div>
+      </li>
+      <li>
+        If the solvent was changed to a non-polar solvent, which dye would have traveled further up?<br>
+        <label class="mc"><input type="radio" name="q7" value="Yellow Dye"> Yellow Dye</label>
+        <label class="mc"><input type="radio" name="q7" value="Red Dye"> Red Dye</label>
+        <label class="mc"><input type="radio" name="q7" value="Blue Dye"> Blue Dye</label>
+        <div id="fb7" class="feedback"></div>
+      </li>
+    </ol>
+
+    <div style="margin-top:10px;">
+      <button id="checkBtn">Check Answers</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Simulation setup
+const FIXED_RF = { red:0.35, blue:0.50, yellow:0.70 };
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const runBtn = document.getElementById('runBtn');
+const pigmentSelect = document.getElementById('pigmentSelect');
+const distanceDisplay = document.getElementById('distanceDisplay');
+
+const CANVAS_W = canvas.width, CANVAS_H = canvas.height;
+const PAPER_LEFT = 40, PAPER_RIGHT = CANVAS_W - 40, PAPER_TOP = 20, PAPER_BOTTOM = CANVAS_H - 20;
+const PAPER_PIXELS = PAPER_BOTTOM - PAPER_TOP;
+const PAPER_CM = 12.0;
+const PIXEL_TO_CM = PAPER_CM / PAPER_PIXELS;
+const CM_TO_PIXEL = PAPER_PIXELS / PAPER_CM;
+
+let solventTargetCm, solventTargetPx, solventCurrentPx;
+let dyePositionsCm = {}, dyePositionsPx = {};
+let running = false, animRequest = null;
+
+function prepareSimulation() {
+  solventTargetCm = +(8.2 + Math.random()*(9.8-8.2)).toFixed(3);
+  dyePositionsCm.red = +(FIXED_RF.red * solventTargetCm).toFixed(3);
+  dyePositionsCm.blue = +(FIXED_RF.blue * solventTargetCm).toFixed(3);
+  dyePositionsCm.yellow = +(FIXED_RF.yellow * solventTargetCm).toFixed(3);
+  solventTargetPx = PAPER_BOTTOM - solventTargetCm * CM_TO_PIXEL;
+  dyePositionsPx.red = PAPER_BOTTOM - dyePositionsCm.red * CM_TO_PIXEL;
+  dyePositionsPx.blue = PAPER_BOTTOM - dyePositionsCm.blue * CM_TO_PIXEL;
+  dyePositionsPx.yellow = PAPER_BOTTOM - dyePositionsCm.yellow * CM_TO_PIXEL;
+  solventCurrentPx = PAPER_BOTTOM;
+}
+
+function drawScene(t=0) {
+  ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
+  ctx.fillStyle="#fff"; ctx.fillRect(PAPER_LEFT,PAPER_TOP,PAPER_RIGHT-PAPER_LEFT,PAPER_PIXELS);
+
+  ctx.fillStyle="#333"; ctx.font="11px Arial"; ctx.textAlign="left";
+  for(let cm=0; cm<=PAPER_CM; cm++){
+    const y=PAPER_BOTTOM - cm*CM_TO_PIXEL;
+    ctx.fillText(cm+" cm", PAPER_RIGHT+8, y+3);
+    ctx.beginPath(); ctx.moveTo(PAPER_LEFT,y); ctx.lineTo(PAPER_RIGHT,y);
+    ctx.strokeStyle="#eee"; ctx.stroke();
+  }
+
+  ctx.fillStyle="rgba(173,216,230,0.35)";
+  ctx.fillRect(PAPER_LEFT, solventCurrentPx, PAPER_RIGHT-PAPER_LEFT, PAPER_BOTTOM - solventCurrentPx);
+  ctx.fillStyle="#60a7ff";
+  ctx.fillRect(PAPER_LEFT, solventCurrentPx-1, PAPER_RIGHT-PAPER_LEFT, 2);
+
+  const selected = Array.from(pigmentSelect.selectedOptions).map(o=>o.value);
+  const colors = { red:"#ff4d4d", blue:"#2a6cff", yellow:"#ffd24d" };
+  const strokes = { red:"#8b0000", blue:"#133a8a", yellow:"#b37b00" };
+
+  const xMid = PAPER_LEFT+(PAPER_RIGHT-PAPER_LEFT)/2;
+  if(selected.includes("red")) drawDot(xMid-24, PAPER_BOTTOM + (dyePositionsPx.red-PAPER_BOTTOM)*t, colors.red, strokes.red);
+  if(selected.includes("blue")) drawDot(xMid, PAPER_BOTTOM + (dyePositionsPx.blue-PAPER_BOTTOM)*t, colors.blue, strokes.blue);
+  if(selected.includes("yellow")) drawDot(xMid+24, PAPER_BOTTOM + (dyePositionsPx.yellow-PAPER_BOTTOM)*t, colors.yellow, strokes.yellow);
+  if(selected.includes("mystery")){
+    const yR = PAPER_BOTTOM + (dyePositionsPx.red-PAPER_BOTTOM)*t;
+    const yY = PAPER_BOTTOM + (dyePositionsPx.yellow-PAPER_BOTTOM)*t;
+    ctx.beginPath(); ctx.arc(xMid-10, yR, 6, 0, Math.PI*2); ctx.fillStyle="#666"; ctx.fill(); ctx.strokeStyle="#333"; ctx.stroke();
+    ctx.beginPath(); ctx.arc(xMid+10, yY, 6, 0, Math.PI*2); ctx.fillStyle="#999"; ctx.fill(); ctx.strokeStyle="#666"; ctx.stroke();
+  }
+}
+
+function drawDot(x, y, fill, stroke){ ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2); ctx.fillStyle=fill; ctx.fill(); ctx.strokeStyle=stroke; ctx.stroke(); }
+function format1(n){ return (Math.round(n*10)/10).toFixed(1); }
+
+function updateDistanceDisplay(t){
+  const solventCm = (PAPER_BOTTOM - (PAPER_BOTTOM + (solventTargetPx - PAPER_BOTTOM)*t))*PIXEL_TO_CM;
+  let html = `Solvent distance: <strong>${format1(solventCm)} cm</strong><br>`;
+  const selected = Array.from(pigmentSelect.selectedOptions).map(o=>o.value);
+  if(selected.includes("red")) html += `Red: <strong>${format1(dyePositionsCm.red*t)} cm</strong><br>`;
+  if(selected.includes("blue")) html += `Blue: <strong>${format1(dyePositionsCm.blue*t)} cm</strong><br>`;
+  if(selected.includes("yellow")) html += `Yellow: <strong>${format1(dyePositionsCm.yellow*t)} cm</strong><br>`;
+  if(selected.includes("mystery")) {
+    html += `Mystery component 1: <strong>${format1(dyePositionsCm.red*t)} cm</strong><br>`;
+    html += `Mystery component 2: <strong>${format1(dyePositionsCm.yellow*t)} cm</strong>`;
+  }
+  distanceDisplay.innerHTML = html;
+}
+
+function animate(){
+  if(!running)return;
+  const total= PAPER_BOTTOM - solventTargetPx;
+  const step=1.4;
+  solventCurrentPx = Math.max(solventTargetPx, solventCurrentPx - step);
+  const t = (PAPER_BOTTOM - solventCurrentPx)/total;
+  drawScene(t);
+  updateDistanceDisplay(t);
+  if(solventCurrentPx<=solventTargetPx){running=false;cancelAnimationFrame(animRequest);return;}
+  animRequest=requestAnimationFrame(animate);
+}
+
+// Automatic reset when pigment selection changes
+function resetSimulation() {
+  cancelAnimationFrame(animRequest);
+  running = false;
+  solventCurrentPx = PAPER_BOTTOM;
+  prepareSimulation();
+  drawScene(0);
+  updateDistanceDisplay(0);
+}
+pigmentSelect.addEventListener("change", resetSimulation);
+
+runBtn.onclick=()=>{
+  if(running)return;
+  running=true;
+  solventCurrentPx=PAPER_BOTTOM;
+  drawScene(0);
+  updateDistanceDisplay(0);
+  animate();
+};
+
+// Check answers
+const fb = [...Array(8).keys()].reduce((a,i)=>{if(i)a[i]=document.getElementById('fb'+i);return a;},{});  
+
+function checkAnswers(){
+  const correct = {
+    q1: FIXED_RF.red.toFixed(2),
+    q2: FIXED_RF.blue.toFixed(2),
+    q3: FIXED_RF.yellow.toFixed(2),
+    q4: "Red Dye and Yellow Dye",
+    q5: "Yellow Dye",
+    q6: (11.2*FIXED_RF.blue).toFixed(1),
+    q7: "Red Dye"
+  };
+
+  function checkNum(id, val, ans, tol=0.02){
+    const el = fb[id];
+    if(!val){el.innerHTML='<span class="incorrect">No answer.</span>';return;}
+    const diff = Math.abs(parseFloat(val) - ans);
+    el.innerHTML = diff <= tol ? '<span class="correct">✅ Correct!</span>'
+                               : `<span class="incorrect">❌ Incorrect. Correct: <strong>${ans}</strong></span>`;
+}
+
+  function checkMC(id,val,ans){
+    const el=fb[id];
+    if(!val){el.innerHTML='<span class="incorrect">No selection.</span>';return;}
+    el.innerHTML=val===ans?'<span class="correct">✅ Correct!</span>':`<span class="incorrect">❌ Incorrect. Correct: <strong>${ans}</strong></span>`;
+  }
+
+  checkNum(1,document.getElementById('q1').value,parseFloat(correct.q1));
+  checkNum(2,document.getElementById('q2').value,parseFloat(correct.q2));
+  checkNum(3,document.getElementById('q3').value,parseFloat(correct.q3));
+  checkMC(4,(document.querySelector('input[name="q4"]:checked')||{}).value,correct.q4);
+  checkMC(5,(document.querySelector('input[name="q5"]:checked')||{}).value,correct.q5);
+  checkNum(6,document.getElementById('q6').value,parseFloat(correct.q6), 0.15);
+  checkMC(7,(document.querySelector('input[name="q7"]:checked')||{}).value,correct.q7);
+}
+
+document.getElementById('checkBtn').onclick=checkAnswers;
+
+// Initialize
+prepareSimulation();
+drawScene(0);
+updateDistanceDisplay(0);
+</script>
+
+</body>
+</html>
